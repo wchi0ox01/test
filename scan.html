@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>สแกนใบหน้าเช็คชื่อ</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- face-api.js -->
+    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <style>
+        body { font-family: 'Inter', 'Kanit', sans-serif; }
+        .loader { border-top-color: #3b82f6; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen p-4">
+    <div class="max-w-4xl mx-auto">
+        <!-- Header -->
+        <header class="bg-white rounded-lg shadow-md p-4 mb-6 flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <i data-lucide="scan-face" class="text-blue-600 w-8 h-8"></i>
+                <h1 class="text-xl md:text-2xl font-bold text-gray-700">ระบบเช็คชื่อนักเรียนอัจฉริยะ</h1>
+            </div>
+            <div class="flex items-center gap-2">
+                <button onclick="logout()" class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 flex items-center gap-2">
+                    <i data-lucide="log-out"></i>
+                    <span>ออกจากระบบ</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Student Info -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-lg font-semibold mb-4">ข้อมูลนักเรียน</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="flex items-center space-x-4">
+                    <img id="student-photo" src="" class="w-24 h-24 rounded-full object-cover border-2 border-gray-300">
+                    <div>
+                        <p class="text-lg font-bold" id="student-name-display"></p>
+                        <p class="text-gray-600" id="student-id-display"></p>
+                        <p class="text-gray-600" id="student-class-display"></p>
+                        <p class="text-gray-600" id="student-department-display"></p>
+                    </div>
+                </div>
+                <div class="flex items-center justify-center">
+                    <div class="text-center">
+                        <p class="text-sm text-gray-500">สถานะการเช็คชื่อวันนี้</p>
+                        <p id="attendance-status" class="text-xl font-bold text-gray-700 mt-2">ยังไม่ได้เช็คชื่อ</p>
+                        <p id="attendance-time" class="text-sm text-gray-500 mt-1"></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Scanning Section -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h2 class="text-lg font-semibold mb-4">สแกนใบหน้าเช็คชื่อ</h2>
+            
+            <div id="start-scan-section" class="text-center p-8">
+                <p class="text-gray-600 mb-6">กดปุ่มด้านล่างเพื่อเริ่มเปิดกล้องและสแกนใบหน้า</p>
+                <button onclick="startScanning()" class="bg-blue-600 text-white px-8 py-3 rounded-full hover:bg-blue-700 text-lg font-semibold flex items-center justify-center mx-auto gap-2">
+                    <i data-lucide="camera"></i>
+                    <span>เริ่มเช็คชื่อ</span>
+                </button>
+            </div>
+            
+            <div id="scanning-section" class="hidden">
+                <div class="flex flex-col items-center">
+                    <h3 class="text-lg font-semibold mb-4">กำลังสแกน...</h3>
+                    <div id="video-loader" class="flex flex-col items-center justify-center h-64 w-full">
+                        <div class="loader w-12 h-12 rounded-full border-4 border-gray-200"></div>
+                        <p id="video-loading-text" class="mt-4 text-gray-600">กำลังเปิดกล้อง...</p>
+                    </div>
+                    <div class="w-full max-w-2xl mx-auto bg-black rounded-lg overflow-hidden relative aspect-video hidden" id="video-wrapper">
+                        <video id="video" class="w-full h-full" autoplay muted playsinline></video>
+                        <canvas id="overlay" class="absolute top-0 left-0"></canvas>
+                        <div id="scan-success-overlay" class="absolute inset-0 bg-green-900 bg-opacity-70 text-white text-2xl font-bold flex items-center justify-center hidden">
+                            <span id="scan-success-name"></span>&nbsp;เช็คชื่อสำเร็จ!
+                        </div>
+                    </div>
+                </div>
+                <div class="text-center mt-6">
+                    <button onclick="stopScanning()" class="bg-red-600 text-white px-8 py-3 rounded-full hover:bg-red-700 text-lg font-semibold flex items-center justify-center mx-auto gap-2">
+                        <i data-lucide="stop-circle"></i>
+                        <span>สิ้นสุดการเช็คชื่อ</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ตัวแปร global
+        let isScanning = false;
+        let videoStream = null;
+        let recognitionInterval = null;
+        let studentData = null;
+        let faceMatcher = null;
+
+        // โหลดข้อมูลนักเรียน
+        function loadStudentData() {
+            const data = localStorage.getItem('studentData');
+            if (data) {
+                studentData = JSON.parse(data);
+                
+                // แสดงข้อมูลนักเรียน
+                document.getElementById('student-photo').src = studentData.imageData;
+                document.getElementById('student-name-display').textContent = studentData.name;
+                document.getElementById('student-id-display').textContent = `รหัส: ${studentData.id}`;
+                document.getElementById('student-class-display').textContent = `ระดับชั้น: ${studentData.class}`;
+                document.getElementById('student-department-display').textContent = `แผนก: ${studentData.department}`;
+                
+                // ตรวจสอบสถานะการเช็คชื่อวันนี้
+                checkTodayAttendance();
+            } else {
+                // ถ้าไม่มีข้อมูลนักเรียน ให้กลับไปหน้าแรก
+                window.location.href = 'index.html';
+            }
+        }
+
+        // ตรวจสอบการเช็คชื่อวันนี้
+        function checkTodayAttendance() {
+            const today = new Date().toDateString();
+            const attendanceData = JSON.parse(localStorage.getItem('attendanceData') || '{}');
+            
+            if (attendanceData[today] && attendanceData[today][studentData.id]) {
+                const record = attendanceData[today][studentData.id];
+                document.getElementById('attendance-status').textContent = 'เช็คชื่อแล้ว';
+                document.getElementById('attendance-status').classList.add('text-green-600');
+                document.getElementById('attendance-time').textContent = `เวลา: ${record.time}`;
+            }
+        }
+
+        // เริ่มการสแกน
+        function startScanning() {
+            document.getElementById('start-scan-section').classList.add('hidden');
+            document.getElementById('scanning-section').classList.remove('hidden');
+            isScanning = true;
+            startVideo();
+        }
+
+        // หยุดการสแกน
+        function stopScanning() {
+            isScanning = false;
+            if (recognitionInterval) {
+                clearInterval(recognitionInterval);
+                recognitionInterval = null;
+            }
+
+            const video = document.getElementById('video');
+            video.removeEventListener('play', onVideoPlay);
+            if (video.srcObject) { 
+                video.srcObject.getTracks().forEach(track => track.stop()); 
+                video.srcObject = null;
+            }
+
+            document.getElementById('video-loader').style.display = 'flex';
+            document.getElementById('video-loading-text').innerText = 'กำลังเปิดกล้อง...';
+            document.getElementById('video-wrapper').classList.add('hidden');
+            document.getElementById('scan-success-overlay').classList.add('hidden');
+            document.getElementById('scanning-section').classList.add('hidden');
+            document.getElementById('start-scan-section').classList.remove('hidden');
+        }
+
+        // เริ่มวิดีโอ
+        async function startVideo() {
+            const video = document.getElementById('video');
+            video.addEventListener('play', onVideoPlay);
+            
+            const videoLoadingText = document.getElementById('video-loading-text');
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+            } catch (err) {
+                console.error('CRITICAL ERROR starting video stream:', err.name, err.message);
+                videoLoadingText.innerText = 'ไม่สามารถเปิดกล้องได้! กรุณาอนุญาตให้เว็บเข้าถึงกล้อง';
+                alert(`ไม่สามารถเปิดกล้องได้: ${err.name}\nกรุณาตรวจสอบว่าคุณได้อนุญาตให้เบราว์เซอร์เข้าถึงกล้องแล้ว`);
+                stopScanning();
+            }
+        }
+
+        // เมื่อวิดีโอเริ่มเล่น
+        function onVideoPlay() {
+            document.getElementById('video-loader').style.display = 'none';
+            document.getElementById('video-wrapper').classList.remove('hidden');
+            const video = document.getElementById('video');
+            const overlay = document.getElementById('overlay');
+            const displaySize = { width: video.clientWidth, height: video.clientHeight };
+            faceapi.matchDimensions(overlay, displaySize);
+
+            if (recognitionInterval) clearInterval(recognitionInterval);
+            recognitionInterval = setInterval(async () => {
+                if (!isScanning) return;
+                const detections = await faceapi.detectAllFaces(video).withFaceLandmarks().withFaceDescriptors();
+                const resizedDetections = faceapi.resizeResults(detections, displaySize);
+                overlay.getContext('2d').clearRect(0, 0, overlay.width, overlay.height);
+                
+                if (faceMatcher) {
+                    const results = resizedDetections.map(d => faceMatcher.findBestMatch(d.descriptor));
+                    results.forEach((result, i) => {
+                        const box = resizedDetections[i].detection.box;
+                        const drawBox = new faceapi.draw.DrawBox(box, { label: result.toString() });
+                        drawBox.draw(overlay);
+                        
+                        if (result.label === studentData.name && result.distance < 0.6) {
+                            handleRecognition();
+                        }
+                    });
+                }
+            }, 500);
+        }
+
+        // โหลดโมเดล face-api.js
+        async function loadFaceModels() {
+            try {
+                if (typeof faceapi === 'undefined') {
+                    console.error('face-api.js has not been loaded yet.');
+                    return;
+                }
+                
+                const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+                await Promise.all([
+                    faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
+                    faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+                    faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+                ]);
+                
+                // สร้าง face matcher จากรูปภาพนักเรียน
+                if (studentData && studentData.imageData) {
+                    try {
+                        const img = await faceapi.fetchImage(studentData.imageData);
+                        const detections = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
+                        if (detections) {
+                            const labeledFaceDescriptors = new faceapi.LabeledFaceDescriptors(studentData.name, [detections.descriptor]);
+                            faceMatcher = new faceapi.FaceMatcher([labeledFaceDescriptors], 0.6);
+                            console.log('Face matcher ready.');
+                        }
+                    } catch (e) {
+                        console.error('Could not process student image for recognition', e);
+                    }
+                }
+            } catch (error) {
+                console.error('Initialization failed:', error);
+            }
+        }
+
+        // จัดการเมื่อจดจำใบหน้าได้
+        function handleRecognition() {
+            // บันทึกการเช็คชื่อ
+            const today = new Date().toDateString();
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('th-TH');
+            
+            let attendanceData = JSON.parse(localStorage.getItem('attendanceData') || '{}');
+            if (!attendanceData[today]) {
+                attendanceData[today] = {};
+            }
+            
+            attendanceData[today][studentData.id] = {
+                name: studentData.name,
+                time: timeString,
+                timestamp: now.toISOString()
+            };
+            
+            localStorage.setItem('attendanceData', JSON.stringify(attendanceData));
+            
+            // แสดงผลสำเร็จ
+            const successOverlay = document.getElementById('scan-success-overlay');
+            const successName = document.getElementById('scan-success-name');
+            successName.textContent = studentData.name;
+            successOverlay.classList.remove('hidden');
+
+            // อัพเดทสถานะบนหน้า
+            document.getElementById('attendance-status').textContent = 'เช็คชื่อแล้ว';
+            document.getElementById('attendance-status').classList.add('text-green-600');
+            document.getElementById('attendance-time').textContent = `เวลา: ${timeString}`;
+            
+            // หยุดการสแกนชั่วคราว
+            isScanning = false;
+            
+            setTimeout(() => {
+                successOverlay.classList.add('hidden');
+                isScanning = true;
+            }, 3000);
+        }
+
+        // ออกจากระบบ
+        function logout() {
+            if (confirm('คุณแน่ใจหรือไม่ที่จะออกจากระบบ?')) {
+                localStorage.removeItem('studentData');
+                window.location.href = 'index.html';
+            }
+        }
+
+        // โหลดหน้า
+        window.addEventListener('load', async function() {
+            lucide.createIcons();
+            loadStudentData();
+            await loadFaceModels();
+        });
+    </script>
+</body>
+</html>
