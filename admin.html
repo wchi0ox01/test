@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบจัดการนักเรียน - ผู้ดูแลระบบ</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: 'Inter', 'Kanit', sans-serif; }
+        .loader { border-top-color: #3b82f6; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .custom-scrollbar::-webkit-scrollbar { width: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 10px; }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <!-- Main Container -->
+    <div class="container mx-auto p-4 md:p-6">
+
+        <!-- Header -->
+        <header class="bg-white rounded-lg shadow-md p-4 mb-6 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div class="flex items-center space-x-3">
+                <i data-lucide="shield" class="text-blue-600 w-8 h-8"></i>
+                <h1 class="text-xl md:text-2xl font-bold text-gray-700">ระบบจัดการนักเรียน - ผู้ดูแลระบบ</h1>
+            </div>
+            <div class="flex items-center gap-2">
+                <nav class="flex items-center flex-wrap justify-center space-x-1 md:space-x-2 bg-gray-200 p-1 rounded-lg">
+                    <button onclick="switchTab('dashboard')" id="tab-dashboard" class="px-3 py-1.5 text-sm font-medium rounded-md bg-blue-600 text-white">แดชบอร์ด</button>
+                    <button onclick="switchTab('manage')" id="tab-manage" class="px-3 py-1.5 text-sm font-medium rounded-md text-gray-600">จัดการนักเรียน</button>
+                </nav>
+                <button onclick="goToScanPage()" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2">
+                    <i data-lucide="scan-face"></i>
+                    <span>ไปหน้าสแกน</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Dynamic Content Area -->
+        <main id="main-content">
+            <!-- Dashboard Tab -->
+            <div id="content-dashboard" class="space-y-6">
+                <div class="bg-white p-4 sm:p-6 rounded-lg shadow-md">
+                    <div class="flex flex-col sm:flex-row items-center justify-between mb-4 gap-4">
+                        <h2 class="text-lg font-semibold text-gray-700">ภาพรวมการเช็คชื่อ</h2>
+                        <input type="date" id="dashboard-date" class="border rounded-lg p-2 w-full sm:w-auto">
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 text-center">
+                        <div class="bg-blue-100 p-4 rounded-lg">
+                            <h3 class="text-gray-600">มาเรียน</h3>
+                            <p id="stat-present" class="text-3xl font-bold text-blue-700">0</p>
+                        </div>
+                        <div class="bg-yellow-100 p-4 rounded-lg">
+                            <h3 class="text-gray-600">มาสาย</h3>
+                            <p id="stat-late" class="text-3xl font-bold text-yellow-700">0</p>
+                        </div>
+                        <div class="bg-red-100 p-4 rounded-lg">
+                            <h3 class="text-gray-600">ขาด/ลา</h3>
+                            <p id="stat-absent" class="text-3xl font-bold text-red-700">0</p>
+                        </div>
+                    </div>
+
+                    <!-- Chart Container -->
+                    <div class="grid grid-cols-1 lg:grid-cols-5 gap-6 mt-6">
+                        <div class="lg:col-span-2 bg-gray-50 p-4 rounded-lg">
+                            <h3 class="font-semibold mb-2 text-center">สรุปการเข้าเรียน</h3>
+                            <div class="max-w-[250px] mx-auto">
+                                <canvas id="attendance-pie-chart"></canvas>
+                            </div>
+                        </div>
+                        <div class="lg:col-span-3 bg-gray-50 p-4 rounded-lg">
+                            <h3 class="font-semibold mb-2 text-center">จำนวนการเช็คชื่อรายชั่วโมง</h3>
+                            <div>
+                                <canvas id="attendance-bar-chart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="bg-white p-4 sm:p-6 rounded-lg shadow-md">
+                    <h3 class="font-semibold mb-4">รายชื่อนักเรียนทั้งหมด</h3>
+                    <div id="student-roster-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 max-h-[60vh] overflow-y-auto custom-scrollbar pr-2"></div>
+                    <div id="roster-loading" class="text-center py-8">
+                        <div class="loader w-12 h-12 rounded-full border-4 border-gray-200 mx-auto"></div>
+                        <p class="mt-4 text-gray-600">กำลังโหลดข้อมูลนักเรียน...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Manage Students Tab -->
+            <div id="content-manage" class="hidden">
+                <div class="bg-white p-4 sm:p-6 rounded-lg shadow-md">
+                    <div class="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
+                        <h2 class="text-lg font-semibold text-gray-700">จัดการข้อมูลนักเรียน</h2>
+                        <div class="flex gap-2">
+                            <button onclick="openStudentModal()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center space-x-2 justify-center">
+                                <i data-lucide="user-plus"></i>
+                                <span>เพิ่มนักเรียน</span>
+                            </button>
+                            <button onclick="syncWithGoogleSheets()" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center space-x-2 justify-center">
+                                <i data-lucide="refresh-cw"></i>
+                                <span>Sync ข้อมูล</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left min-w-[600px]">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="p-3">รหัสนักเรียน</th>
+                                    <th class="p-3">ชื่อ-สกุล</th>
+                                    <th class="p-3">ระดับชั้น</th>
+                                    <th class="p-3">แผนก</th>
+                                    <th class="p-3 text-center">จัดการ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="student-table-body" class="divide-y divide-gray-200"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Setup Modal -->
+    <div id="setup-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-lg shadow-xl p-6 sm:p-8 max-w-lg w-full">
+            <h2 class="text-2xl font-bold mb-4">ตั้งค่า Google Apps Script</h2>
+            <p class="text-gray-600 mb-6">กรุณานำ URL ของ Google Apps Script Web App ที่ได้จากการ Deploy มาวางที่นี่</p>
+            <label for="gas-url" class="block font-medium mb-2">Google Apps Script URL:</label>
+            <input type="url" id="gas-url" placeholder="https://script.google.com/macros/s/..." 
+                   class="w-full border-gray-300 rounded-lg p-3">
+            <button onclick="saveGasUrl()" 
+                    class="w-full bg-blue-600 text-white font-bold py-3 rounded-lg mt-8 hover:bg-blue-700">
+                บันทึกการตั้งค่า
+            </button>
+        </div>
+    </div>
+
+    <!-- Student Modal -->
+    <div id="student-modal" class="fixed inset-0 bg-gray-800 bg-opacity-70 flex items-center justify-center p-4 z-40 hidden">
+        <div class="bg-white rounded-lg shadow-xl p-6 md:p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto custom-scrollbar">
+            <h2 id="modal-title" class="text-2xl font-bold mb-6">เพิ่มข้อมูลนักเรียน</h2>
+            <form id="student-form" onsubmit="handleStudentFormSubmit(event)">
+                <input type="hidden" id="student-row-index">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label for="student-id" class="block font-medium mb-2">รหัสนักเรียน</label>
+                        <input type="text" id="student-id" class="w-full border-gray-300 rounded-lg p-3" required>
+                        
+                        <label for="student-name" class="block font-medium mb-2 mt-4">ชื่อ-สกุล</label>
+                        <input type="text" id="student-name" class="w-full border-gray-300 rounded-lg p-3" required>
+                        
+                        <label for="student-class" class="block font-medium mb-2 mt-4">ระดับชั้น</label>
+                        <select id="student-class" class="w-full border-gray-300 rounded-lg p-3" required>
+                            <option value="">เลือกระดับชั้น</option>
+                            <option value="ปวช.1">ปวช.1</option>
+                            <option value="ปวช.2">ปวช.2</option>
+                            <option value="ปวช.3">ปวช.3</option>
+                            <option value="ปวส.1">ปวส.1</option>
+                            <option value="ปวส.2">ปวส.2</option>
+                        </select>
+                        
+                        <label for="student-department" class="block font-medium mb-2 mt-4">แผนก</label>
+                        <select id="student-department" class="w-full border-gray-300 rounded-lg p-3" required>
+                            <option value="">เลือกแผนก</option>
+                            <option value="คอมพิวเตอร์ธุรกิจ">คอมพิวเตอร์ธุรกิจ</option>
+                            <option value="การบัญชี">การบัญชี</option>
+                            <option value="การตลาด">การตลาด</option>
+                            <option value="การจัดการโลจิสติกส์">การจัดการโลจิสติกส์</option>
+                        </select>
+                    </div>
+                    <div class="flex flex-col">
+                        <div class="flex border-b border-gray-200 mb-4">
+                            <button type="button" id="tab-btn-camera" onclick="switchImageInput('camera')" class="flex-1 py-2 text-center font-medium border-b-2 border-blue-600 text-blue-600">ถ่ายภาพ</button>
+                            <button type="button" id="tab-btn-upload" onclick="switchImageInput('upload')" class="flex-1 py-2 text-center font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700">อัปโหลด</button>
+                        </div>
+                        <div id="input-camera" class="flex flex-col items-center">
+                            <div class="w-full max-w-xs mx-auto aspect-[4/3] bg-gray-200 rounded-lg overflow-hidden relative">
+                                <video id="capture-video" class="w-full h-full object-cover" autoplay playsinline></video>
+                                <canvas id="capture-canvas" class="hidden"></canvas>
+                            </div>
+                            <button type="button" onclick="capturePhoto()" class="bg-indigo-600 text-white px-4 py-2 mt-4 rounded-lg hover:bg-indigo-700 w-full max-w-xs">ถ่ายภาพ</button>
+                        </div>
+                        <div id="input-upload" class="hidden flex flex-col items-center">
+                            <div class="w-full max-w-xs mx-auto aspect-[4/3] bg-gray-200 rounded-lg flex items-center justify-center">
+                                <img id="image-preview" src="" class="w-full h-full object-cover hidden">
+                            </div>
+                            <input type="file" id="image-upload-input" accept="image/*" class="hidden">
+                            <button type="button" onclick="document.getElementById('image-upload-input').click()" class="bg-indigo-600 text-white px-4 py-2 mt-4 rounded-lg hover:bg-indigo-700 w-full max-w-xs">เลือกไฟล์รูปภาพ</button>
+                        </div>
+                        <input type="hidden" id="student-image-data">
+                    </div>
+                </div>
+                <div class="flex justify-end space-x-4 mt-8">
+                    <button type="button" onclick="closeStudentModal()" class="bg-gray-200 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-300">ยกเลิก</button>
+                    <button type="submit" id="form-submit-btn" class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700">บันทึก</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // --- GLOBAL STATE & CONFIG ---
+        const GAS_URL_KEY = 'gasWebAppUrl';
+        let gasWebAppUrl = '';
+        let students = [];
+        let attendance = [];
+        let pieChart, barChart;
+        let captureStream = null;
+
+        // --- INITIALIZATION ---
+        window.onload = async () => {
+            lucide.createIcons();
+            
+            // ตรวจสอบการตั้งค่า GAS URL
+            gasWebAppUrl = localStorage.getItem(GAS_URL_KEY);
+            if (!gasWebAppUrl) {
+                document.getElementById('setup-modal').classList.remove('hidden');
+            } else {
+                document.getElementById('setup-modal').classList.add('hidden');
+            }
+            
+            document.getElementById('dashboard-date').valueAsDate = new Date();
+            document.getElementById('dashboard-date').addEventListener('change', () => { 
+                loadAttendanceDataForDashboard(); 
+            });
+            
+            // โหลดข้อมูลเริ่มต้น
+            loadStudentRosterForDashboard();
+            loadStudentDataForTable();
+            loadAttendanceDataForDashboard();
+        };
+
+        // --- GAS URL MANAGEMENT ---
+        function saveGasUrl() {
+            const url = document.getElementById('gas-url').value.trim();
+            if (url) {
+                localStorage.setItem(GAS_URL_KEY, url);
+                gasWebAppUrl = url;
+                document.getElementById('setup-modal').classList.add('hidden');
+                
+                // Sync ข้อมูลหลังจากตั้งค่า GAS URL
+                syncWithGoogleSheets();
+            } else {
+                alert('กรุณากรอก URL ให้ถูกต้อง');
+            }
+        }
+
+        // --- UI & NAVIGATION ---
+        function switchTab(tabName) {
+            stopCaptureVideo();
+
+            ['dashboard', 'manage'].forEach(name => {
+                document.getElementById(`content-${name}`).classList.add('hidden');
+                document.getElementById(`tab-${name}`).classList.remove('bg-blue-600', 'text-white');
+                document.getElementById(`tab-${name}`).classList.add('text-gray-600');
+            });
+            
+            document.getElementById(`content-${tabName}`).classList.remove('hidden');
+            const activeTab = document.getElementById(`tab-${tabName}`);
+            activeTab.classList.add('bg-blue-600', 'text-white');
+            activeTab.classList.remove('text-gray-600');
+            
+            if (tabName === 'dashboard') {
+                loadStudentRosterForDashboard();
+                loadAttendanceDataForDashboard();
+            } else if (tabName === 'manage') { 
+                loadStudentDataForTable(); 
+            }
+        }
+
+        function goToScanPage() {
+            window.location.href = 'scan.html';
+        }
+
+        // --- DASHBOARD ROSTER ---
+        async function loadStudentRosterForDashboard() {
+            const rosterGrid = document.getElementById('student-roster-grid');
+            const rosterLoading = document.getElementById('roster-loading');
+            rosterGrid.innerHTML = ''; 
+            rosterLoading.style.display = 'block';
+            
+            // โหลดข้อมูลนักเรียนจาก localStorage
+            students = getAllStudents();
+            
+            if (students.length === 0) {
+                rosterGrid.innerHTML = `<p class="col-span-full text-center text-gray-500">ยังไม่มีข้อมูลนักเรียนในระบบ</p>`;
+            } else {
+                students.forEach(student => {
+                    const card = document.createElement('div');
+                    card.className = 'bg-gray-50 p-3 rounded-lg text-center';
+                    card.innerHTML = `
+                        <img src="${student.imageData || 'https://placehold.co/150x150/e2e8f0/475569?text=No+Image'}" 
+                             class="w-24 h-24 rounded-full object-cover mx-auto mb-2 border-2 border-gray-300">
+                        <p class="font-semibold text-sm truncate">${student.name}</p>
+                        <p class="text-xs text-gray-500">${student.id}</p>
+                        <p class="text-xs text-gray-500">${student.class}</p>
+                        <p class="text-xs text-gray-500">${student.department}</p>
+                    `;
+                    rosterGrid.appendChild(card);
+                });
+            }
+            rosterLoading.style.display = 'none';
+        }
+
+        // --- STUDENT MANAGEMENT ---
+        function openStudentModal(student = null) {
+            const form = document.getElementById('student-form');
+            form.reset();
+            document.getElementById('image-preview').classList.add('hidden');
+            document.getElementById('image-preview').src = '';
+            document.getElementById('student-image-data').value = '';
+            switchImageInput('camera');
+            
+            if (student) {
+                document.getElementById('modal-title').innerText = 'แก้ไขข้อมูลนักเรียน';
+                document.getElementById('student-row-index').value = student.id;
+                document.getElementById('student-id').value = student.id;
+                document.getElementById('student-name').value = student.name;
+                document.getElementById('student-class').value = student.class;
+                document.getElementById('student-department').value = student.department;
+                document.getElementById('student-image-data').value = student.imageData || '';
+                
+                if (student.imageData) {
+                    switchImageInput('upload');
+                    document.getElementById('image-preview').src = student.imageData;
+                    document.getElementById('image-preview').classList.remove('hidden');
+                }
+            } else {
+                document.getElementById('modal-title').innerText = 'เพิ่มข้อมูลนักเรียน';
+            }
+            document.getElementById('student-modal').classList.remove('hidden');
+        }
+
+        function closeStudentModal() { 
+            document.getElementById('student-modal').classList.add('hidden'); 
+            stopCaptureVideo(); 
+        }
+
+        function switchImageInput(type) {
+            const cameraTab = document.getElementById('tab-btn-camera');
+            const uploadTab = document.getElementById('tab-btn-upload');
+            const cameraInput = document.getElementById('input-camera');
+            const uploadInput = document.getElementById('input-upload');
+            
+            if (type === 'camera') {
+                cameraTab.classList.add('border-blue-600', 'text-blue-600');
+                uploadTab.classList.remove('border-blue-600', 'text-blue-600');
+                cameraInput.classList.remove('hidden'); 
+                uploadInput.classList.add('hidden');
+                startCaptureVideo();
+            } else {
+                uploadTab.classList.add('border-blue-600', 'text-blue-600');
+                cameraTab.classList.remove('border-blue-600', 'text-blue-600');
+                uploadInput.classList.remove('hidden'); 
+                cameraInput.classList.add('hidden');
+                stopCaptureVideo();
+            }
+        }
+
+        async function startCaptureVideo() {
+            try {
+                if (captureStream) {
+                    stopCaptureVideo();
+                }
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                captureStream = stream;
+                document.getElementById('capture-video').srcObject = stream;
+            } catch (e) {
+                console.error("Could not start video for capture", e);
+                alert('ไม่สามารถเปิดกล้องสำหรับถ่ายภาพได้');
+            }
+        }
+
+        function stopCaptureVideo() { 
+            if (captureStream) { 
+                captureStream.getTracks().forEach(track => track.stop()); 
+                captureStream = null; 
+            } 
+            const videoEl = document.getElementById('capture-video');
+            if (videoEl && videoEl.srcObject) {
+                videoEl.srcObject.getTracks().forEach(track => track.stop());
+                videoEl.srcObject = null;
+            }
+        }
+
+        function capturePhoto() {
+            const videoEl = document.getElementById('capture-video');
+            if (!videoEl.srcObject) {
+                alert('กรุณาเปิดกล้องก่อนถ่ายภาพ');
+                return;
+            }
+            const canvas = document.getElementById('capture-canvas');
+            canvas.width = videoEl.videoWidth; 
+            canvas.height = videoEl.videoHeight;
+            canvas.getContext('2d').drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+            document.getElementById('student-image-data').value = canvas.toDataURL('image/jpeg');
+            alert('ถ่ายภาพเรียบร้อยแล้ว');
+        }
+
+        // จัดการการอัปโหลดรูปภาพ
+        document.getElementById('image-upload-input').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    document.getElementById('student-image-data').value = event.target.result;
+                    document.getElementById('image-preview').src = event.target.result;
+                    document.getElementById('image-preview').classList.remove('hidden');
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        async function loadStudentDataForTable() {
+            students = getAllStudents();
+            const tableBody = document.getElementById('student-table-body');
+            tableBody.innerHTML = '';
+            
+            students.forEach(student => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="p-3">${student.id}</td>
+                    <td class="p-3">${student.name}</td>
+                    <td class="p-3">${student.class}</td>
+                    <td class="p-3">${student.department}</td>
+                    <td class="p-3 text-center">
+                        <button onclick="editStudent('${student.id}')" class="text-blue-600 p-1 hover:text-blue-800">
+                            <i data-lucide="edit" class="w-4 h-4"></i>
+                        </button>
+                        <button onclick="deleteStudent('${student.id}')" class="text-red-600 p-1 hover:text-red-800">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                    </td>
+                `;
+                tableBody.appendChild(row);
+            });
+            lucide.createIcons();
+        }
+
+        function editStudent(studentId) {
+            const student = students.find(s => s.id === studentId);
+            if (student) {
+                openStudentModal(student);
+            }
+        }
+
+        function deleteStudent(studentId) {
+            if (confirm('คุณแน่ใจหรือไม่ว่าต้องการลบข้อมูลนักเรียนคนนี้?')) {
+                // ลบข้อมูลนักเรียนจาก localStorage
+                const allStudents = getAllStudents();
+                const updatedStudents = allStudents.filter(s => s.id !== studentId);
+                localStorage.setItem('students', JSON.stringify(updatedStudents));
+                
+                // โหลดข้อมูลใหม่
+                loadStudentDataForTable();
+                loadStudentRosterForDashboard();
+                
+                alert('ลบข้อมูลนักเรียนเรียบร้อยแล้ว');
+            }
+        }
+
+        async function handleStudentFormSubmit(event) {
+            event.preventDefault();
+            const submitBtn = document.getElementById('form-submit-btn');
+            submitBtn.disabled = true; 
+            submitBtn.innerText = 'กำลังบันทึก...';
+            
+            const studentData = {
+                id: document.getElementById('student-id').value,
+                name: document.getElementById('student-name').value,
+                class: document.getElementById('student-class').value,
+                department: document.getElementById('student-department').value,
+                imageData: document.getElementById('student-image-data').value
+            };
+            
+            if (!studentData.imageData) {
+                alert('กรุณาถ่ายภาพหรืออัปโหลดรูปภาพ');
+                submitBtn.disabled = false; 
+                submitBtn.innerText = 'บันทึก'; 
+                return;
+            }
+            
+            // บันทึกข้อมูลนักเรียน
+            const allStudents = getAllStudents();
+            const existingIndex = allStudents.findIndex(s => s.id === studentData.id);
+            
+            if (existingIndex !== -1) {
+                // อัพเดทข้อมูลที่มีอยู่
+                allStudents[existingIndex] = studentData;
+            } else {
+                // เพิ่มข้อมูลใหม่
+                allStudents.push(studentData);
+            }
+            
+            localStorage.setItem('students', JSON.stringify(allStudents));
+            
+            closeStudentModal();
+            loadStudentDataForTable();
+            loadStudentRosterForDashboard();
+            
+            submitBtn.disabled = false;
+            submitBtn.innerText = 'บันทึก';
+        }
+
+        // --- GOOGLE SHEETS INTEGRATION ---
+        async function syncWithGoogleSheets() {
+            if (!gasWebAppUrl) {
+                alert('กรุณาตั้งค่า Google Apps Script URL ก่อน');
+                document.getElementById('setup-modal').classList.remove('hidden');
+                return;
+            }
+
+            try {
+                // ดึงข้อมูลนักเรียนจาก Google Sheets
+                const response = await apiCall({ action: 'getStudents' });
+                if (response.success) {
+                    const sheetStudents = response.data;
+                    
+                    if (sheetStudents.length > 0) {
+                        // แปลงข้อมูลจาก Sheets ให้ตรงกับรูปแบบของเรา
+                        const convertedStudents = sheetStudents.map(student => ({
+                            id: student.studentid,
+                            name: student.name,
+                            class: student.class,
+                            department: student.department || '',
+                            imageData: student.imagedatabase64 || ''
+                        }));
+                        
+                        // บันทึกลง localStorage
+                        localStorage.setItem('students', JSON.stringify(convertedStudents));
+                        
+                        // โหลดข้อมูลใหม่
+                        loadStudentDataForTable();
+                        loadStudentRosterForDashboard();
+                        
+                        alert('Sync ข้อมูลจาก Google Sheets สำเร็จ');
+                    } else {
+                        alert('ไม่พบข้อมูลนักเรียนใน Google Sheets');
+                    }
+                } else {
+                    alert('เกิดข้อผิดพลาดในการดึงข้อมูลจาก Google Sheets: ' + response.error);
+                }
+            } catch (error) {
+                console.error('Sync error:', error);
+                alert('เกิดข้อผิดพลาดในการเชื่อมต่อกับ Google Sheets');
+            }
+        }
+
+        async function apiCall(payload) {
+            if (!gasWebAppUrl) {
+                return { success: false, error: 'GAS URL not configured' };
+            }
+            
+            try {
+                const response = await fetch(gasWebAppUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                return await response.json();
+            } catch (error) {
+                console.error('API Call Error:', error);
+                return { success: false, error: error.message };
+            }
+        }
+
+        // --- UTILITIES & DASHBOARD ---
+        function getAllStudents() {
+            return JSON.parse(localStorage.getItem('students') || '[]');
+        }
+
+        function getAllAttendance() {
+            return JSON.parse(localStorage.getItem('attendanceData') || '{}');
+        }
+
+        function loadAttendanceDataForDashboard() {
+            const attendanceData = getAllAttendance();
+            const selectedDate = new Date(document.getElementById('dashboard-date').value);
+            const dateString = selectedDate.toDateString();
+            
+            // แปลงข้อมูลการเช็คชื่อให้อยู่ในรูปแบบที่ต้องการ
+            attendance = [];
+            if (attendanceData[dateString]) {
+                Object.values(attendanceData[dateString]).forEach(record => {
+                    attendance.push({
+                        id: record.name,
+                        name: record.name,
+                        timestamp: new Date(record.timestamp),
+                        status: 'มาเรียน'
+                    });
+                });
+            }
+            
+            renderDashboard();
+        }
+
+        function renderDashboard() {
+            const selectedDate = new Date(document.getElementById('dashboard-date').value);
+            selectedDate.setHours(0,0,0,0);
+            
+            const attendanceToday = attendance.filter(rec => {
+                const recDate = new Date(rec.timestamp);
+                recDate.setHours(0,0,0,0);
+                return recDate.getTime() === selectedDate.getTime();
+            });
+            
+            const lateTime = new Date(selectedDate); 
+            lateTime.setHours(8, 30, 0);
+            
+            let onTimeCount = 0, lateCount = 0;
+            const hourlyCounts = Array(24).fill(0);
+            const presentStudents = new Set();
+            
+            attendanceToday.forEach(rec => {
+                if (rec.status === 'มาเรียน') {
+                    if (!presentStudents.has(rec.id)) {
+                        if (rec.timestamp > lateTime) {
+                            lateCount++;
+                        } else {
+                            onTimeCount++;
+                        }
+                    }
+                    presentStudents.add(rec.id);
+                }
+                hourlyCounts[rec.timestamp.getHours()]++;
+            });
+            
+            const totalStudents = students.length;
+            const absentOrLeaveCount = totalStudents - (onTimeCount + lateCount);
+            
+            document.getElementById('stat-present').innerText = onTimeCount + lateCount;
+            document.getElementById('stat-late').innerText = lateCount;
+            document.getElementById('stat-absent').innerText = Math.max(0, absentOrLeaveCount);
+            
+            renderPieChart(onTimeCount, lateCount, Math.max(0, absentOrLeaveCount));
+            renderBarChart(hourlyCounts);
+        }
+
+        function renderPieChart(onTime, late, absent) {
+            const pieCanvas = document.getElementById('attendance-pie-chart');
+            if (!pieCanvas) return;
+            
+            const ctx = pieCanvas.getContext('2d');
+            if(pieChart) pieChart.destroy();
+            
+            const total = onTime + late + absent;
+            if (total === 0) { 
+                ctx.clearRect(0, 0, pieCanvas.width, pieCanvas.height);
+                return; 
+            }
+            
+            pieChart = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: ['มาตรงเวลา', 'มาสาย', 'ขาด/ลา'],
+                    datasets: [{
+                        data: [onTime, late, absent],
+                        backgroundColor: ['#34D399', '#FBBF24', '#F87171']
+                    }]
+                }
+            });
+        }
+
+        function renderBarChart(hourlyData) {
+            const barCanvas = document.getElementById('attendance-bar-chart');
+            if (!barCanvas) return;
+            
+            const ctx = barCanvas.getContext('2d');
+            if(barChart) barChart.destroy();
+            
+            barChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: Array.from({length: 12}, (_, i) => `${i+6}:00`),
+                    datasets: [{
+                        label: 'จำนวนเช็คชื่อ',
+                        data: hourlyData.slice(6, 18),
+                        backgroundColor: '#60A5FA'
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
